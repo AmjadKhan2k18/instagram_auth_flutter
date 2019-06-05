@@ -2,6 +2,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_facebook_login/flutter_facebook_login.dart';
+import 'package:social_auth/services/instagram.dart';
+import 'package:social_auth/services/login_presenter.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+
 
 GoogleSignIn _googleSignIn = GoogleSignIn(
   scopes: <String>[
@@ -11,31 +15,80 @@ GoogleSignIn _googleSignIn = GoogleSignIn(
 );
 
 class LoginPage extends StatefulWidget {
+  final GlobalKey<ScaffoldState> skey;
   final VoidCallback onSignedIn;
-  LoginPage({this.onSignedIn});
+  LoginPage({this.skey,this.onSignedIn});
 
   @override
-  _LoginPageState createState() => _LoginPageState();
+  _LoginPageState createState() => _LoginPageState(skey);
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends State<LoginPage> implements LoginViewContract{
   Size size;
+  LoginPresenter _presenter;
+  bool _isLoading = false;
+  Token token;
 
-  // FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // GoogleSignIn _googleSignIn;
+  GlobalKey<ScaffoldState> _scaffoldKey;
+
+
+  void showInSnackBar(String value) {
+    _scaffoldKey.currentState.showSnackBar(new SnackBar(
+        content: new Text(value)
+    ));
+  }
+
+  _LoginPageState(GlobalKey<ScaffoldState> skey) {
+    _presenter = new LoginPresenter(this);
+    _scaffoldKey = skey;
+  }
+
+  @override
+  void onLoginError(String msg) {
+    setState(() {
+      _isLoading = false;
+    });
+    // showInSnackBar(msg);
+  }
+
+
+  @override
+  void onLoginScuccess(Token t) {
+    setState(() {
+      _isLoading = false;
+      token = t;
+    });
+    // showInSnackBar('Login successful');
+    createInstaUser();
+    widget.onSignedIn();
+
+  }
+
+  createInstaUser() async {
+    try {
+      final HttpsCallable callable = CloudFunctions.instance.getHttpsCallable(
+        functionName: 'createNewUser',
+      );
+      dynamic resp = callable.call(<String, dynamic>{
+        'username': token.username,
+        'displayName': token.full_name,
+        'photoURL': token.profile_picture,
+        'id': token.id
+      });
+      debugPrint(resp.toString());
+    } catch (e) {
+      debugPrint("Exception : $e");
+    }
+  }
+
+
   @override
   void initState() {
     super.initState();
-    // _googleSignIn = GoogleSignIn(
-    //     scopes: [
-    //       'email',
-    //       'https://www.googleapis.com/auth/contacts.readonly',
-    //     ],
-    //   );
   }
 
-  void initiateFacebookLogin() async {
+  void _handleFacebookLogin() async {
     var facebookLogin = FacebookLogin();
     var facebookLoginResult =
         await facebookLogin.logInWithReadPermissions(['email']);
@@ -56,14 +109,6 @@ class _LoginPageState extends State<LoginPage> {
         FirebaseAuth.instance.signInWithCredential(credential);
         widget.onSignedIn();
         break;
-    }
-  }
-
-  Future<void> _handleSignIn() async {
-    try {
-      await _googleSignIn.signIn();
-    } catch (error) {
-      print(error);
     }
   }
 
@@ -89,11 +134,21 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     size = MediaQuery.of(context).size;
-    return Scaffold(
-        appBar: AppBar(
-          title: Text("Sign in"),
-        ),
-        body: _buildBody());
+    var widget;
+    if (_isLoading) {
+      widget = new Container(
+        color: Colors.white,
+        alignment: Alignment.center,
+        child: new CircularProgressIndicator(),
+      );
+    } else {
+      widget = Scaffold(
+          appBar: AppBar(
+            title: Text("Sign in"),
+          ),
+          body: _buildBody());
+    }
+    return widget;
   }
 
   Widget _buildBody() {
@@ -123,7 +178,7 @@ class _LoginPageState extends State<LoginPage> {
             borderRadius: new BorderRadius.circular(30.0)),
         color: Color(0xff3B5998),
         onPressed: () {
-          initiateFacebookLogin();
+          _handleFacebookLogin();
         },
         child: Text(
           "Facebook",
@@ -143,7 +198,7 @@ class _LoginPageState extends State<LoginPage> {
         shape: new RoundedRectangleBorder(
             borderRadius: new BorderRadius.circular(30.0)),
         color: Color(0xfffb3958),
-        onPressed: _handleSignIn,
+        onPressed: _handleInstagramLogin,
         child: Text(
           "Instagram",
           style: TextStyle(
@@ -170,5 +225,12 @@ class _LoginPageState extends State<LoginPage> {
         ),
       ),
     );
+  }
+
+  void _handleInstagramLogin() {
+    setState(() {
+      _isLoading = true;
+    });
+    _presenter.performLogin();
   }
 }

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:social_auth/root.dart';
+import 'package:social_auth/services/auth.dart';
+import 'package:social_auth/services/root.dart';
 
-import 'auth.dart';
+
 
 void main() => runApp(MaterialApp(
       debugShowCheckedModeBanner: false,

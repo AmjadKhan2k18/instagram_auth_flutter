@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:social_auth/auth.dart';
-import 'package:social_auth/home_page.dart';
+import 'package:social_auth/pages/home_page.dart';
+import 'package:social_auth/pages/login_page.dart';
+import 'auth.dart';
 
-import 'login_page.dart';
 
 
 class RootPage extends StatefulWidget {
+  final GlobalKey<ScaffoldState> _scaffoldKey = new GlobalKey<ScaffoldState>();
   final BaseAuth auth;
   RootPage({this.auth});
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import 'auth.dart';
+import 'package:social_auth/services/auth.dart';
 
 class Home extends StatefulWidget {
   final BaseAuth auth;
