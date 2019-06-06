@@ -1,11 +1,14 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_facebook_login/flutter_facebook_login.dart';
+import 'package:social_auth/db/database.dart';
+import 'package:social_auth/model/user_model.dart';
 import 'package:social_auth/services/instagram.dart';
 import 'package:social_auth/services/login_presenter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
 
 GoogleSignIn _googleSignIn = GoogleSignIn(
   scopes: <String>[
@@ -17,26 +20,25 @@ GoogleSignIn _googleSignIn = GoogleSignIn(
 class LoginPage extends StatefulWidget {
   final GlobalKey<ScaffoldState> skey;
   final VoidCallback onSignedIn;
-  LoginPage({this.skey,this.onSignedIn});
+  LoginPage({this.skey, this.onSignedIn});
 
   @override
   _LoginPageState createState() => _LoginPageState(skey);
 }
 
-class _LoginPageState extends State<LoginPage> implements LoginViewContract{
+class _LoginPageState extends State<LoginPage> implements LoginViewContract {
   Size size;
   LoginPresenter _presenter;
   bool _isLoading = false;
   Token token;
-
+  UserModel model;
+  Database dbAction = Database();
 
   GlobalKey<ScaffoldState> _scaffoldKey;
 
-
   void showInSnackBar(String value) {
-    _scaffoldKey.currentState.showSnackBar(new SnackBar(
-        content: new Text(value)
-    ));
+    _scaffoldKey.currentState
+        .showSnackBar(new SnackBar(content: new Text(value)));
   }
 
   _LoginPageState(GlobalKey<ScaffoldState> skey) {
@@ -49,49 +51,59 @@ class _LoginPageState extends State<LoginPage> implements LoginViewContract{
     setState(() {
       _isLoading = false;
     });
-    // showInSnackBar(msg);
   }
 
-
   @override
-  void onLoginScuccess(Token t) {
+  void onLoginScuccess(Token t) async {
     setState(() {
       _isLoading = false;
       token = t;
     });
-    // showInSnackBar('Login successful');
     createInstaUser();
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('currentId', token.id);
     widget.onSignedIn();
-
   }
 
   createInstaUser() async {
     try {
-      final HttpsCallable callable = CloudFunctions.instance.getHttpsCallable(
-        functionName: 'createNewUser',
-      );
-      dynamic resp = callable.call(<String, dynamic>{
-        'username': token.username,
-        'displayName': token.full_name,
-        'photoURL': token.profile_picture,
-        'id': token.id
+      Firestore.instance
+          .collection('userProfile')
+          .document(token.id)
+          .get()
+          .then((user) {
+        if (user.data == null) {
+
+          final HttpsCallable callable =
+              CloudFunctions.instance.getHttpsCallable(
+            functionName: 'createNewUser',
+          );
+          dynamic resp = callable.call(<String, dynamic>{
+            'username': token.username,
+            'displayName': token.full_name,
+            'photoURL': token.profile_picture,
+            'id': token.id
+          });
+
+        } else {
+
+        }
       });
-      debugPrint(resp.toString());
     } catch (e) {
       debugPrint("Exception : $e");
     }
   }
 
-
   @override
   void initState() {
     super.initState();
+    model = UserModel(displayName: '', photoURL: '', email: '');
   }
 
   void _handleFacebookLogin() async {
     var facebookLogin = FacebookLogin();
-    var facebookLoginResult =
-        await facebookLogin.logInWithReadPermissions(['email']);
+    var facebookLoginResult = await facebookLogin
+        .logInWithReadPermissions(['public_profile', 'email']);
     switch (facebookLoginResult.status) {
       case FacebookLoginStatus.error:
         print("Error");
@@ -102,11 +114,19 @@ class _LoginPageState extends State<LoginPage> implements LoginViewContract{
 
         break;
       case FacebookLoginStatus.loggedIn:
-        print("LoggedIn");
         var myToken = facebookLoginResult.accessToken;
         AuthCredential credential =
             FacebookAuthProvider.getCredential(accessToken: myToken.token);
-        FirebaseAuth.instance.signInWithCredential(credential);
+        var user = await FirebaseAuth.instance.signInWithCredential(credential);
+        model.displayName = user.displayName;
+        model.email = user.email;
+        model.photoURL = user.photoUrl;
+
+
+
+        await dbAction.setUserProfile(user.uid, model);
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setString('currentId', user.uid);
         widget.onSignedIn();
         break;
     }
@@ -120,12 +140,14 @@ class _LoginPageState extends State<LoginPage> implements LoginViewContract{
           accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
       FirebaseUser user =
           await FirebaseAuth.instance.signInWithCredential(credential);
-      debugPrint("${user.displayName}");
+      model.displayName = user.displayName;
+      model.email = user.email;
+      model.photoURL = user.photoUrl;
 
+      await dbAction.setUserProfile(user.uid, model);
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString('currentId', user.uid);
       widget.onSignedIn();
-      // AuthCredential credential = FacebookAuthProvider.getCredential(accessToken: myToken.token);
-      //     FirebaseAuth.instance.linkWithCredential(credential);
-
     } catch (error) {
       print(error);
     }

@@ -7,8 +7,8 @@ import 'package:social_auth/services/root.dart';
 void main() => runApp(MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        brightness: Brightness.light,
-        primaryColor: Color(0xfffb3958),
+        brightness: Brightness.dark,
+        primaryColor: Colors.blueGrey,
         accentColor: Color(0xff64C28E),
       ),
       home: new RootPage(auth: Auth()),
